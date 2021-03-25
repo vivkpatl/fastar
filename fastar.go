@@ -11,14 +11,21 @@ import (
 )
 
 var (
+	url        = "http://localhost:8000/data"
 	size       = uint64(4294967296)
 	numWorkers = 16
 	chunkSize  = uint64(2 << 20)
 )
 
 func main() {
-	fmt.Fprint(os.Stderr, "hello world\n")
-
+	url = os.Args[1]
+	resp, _ := http.Head(url)
+	size = uint64(resp.ContentLength)
+	numWorkers, _ = strconv.Atoi(os.Args[2])
+	chunkSize, _ = strconv.ParseUint(os.Args[3], 10, 64)
+	fmt.Fprintln(os.Stderr, "File Size: "+strconv.FormatUint(size, 10))
+	fmt.Fprintln(os.Stderr, "Num Workers: "+strconv.Itoa(numWorkers))
+	fmt.Fprintln(os.Stderr, "Chunk Size: "+strconv.FormatUint(chunkSize, 10))
 	var chans []chan bool
 	for i := 0; i < numWorkers; i++ {
 		chans = append(chans, make(chan bool))
@@ -38,11 +45,9 @@ func writePartial(wg *sync.WaitGroup, start uint64, chunkSize uint64, curChan ch
 	client := &http.Client{}
 	for {
 		if start >= size {
-			fmt.Fprintln(os.Stderr, "Finished "+strconv.Itoa(idx))
-			// nextChan <- true
 			return
 		}
-		req, err := http.NewRequest("GET", "http://localhost:8000/rand", nil)
+		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			log.Fatal("Failed creating request:", err.Error())
 		}

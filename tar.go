@@ -2,25 +2,16 @@ package main
 
 import (
 	"archive/tar"
-	"compress/gzip"
+	"fmt"
 	"io"
 	"log"
 	"os"
+	"strings"
 )
 
-func ExtractTarGz() {
-	gzipStream, err := os.Open("file.tar.gz")
-	if err != nil {
-		panic(err)
-	}
-	defer gzipStream.Close()
-
-	uncompressedStream, err := gzip.NewReader(gzipStream)
-	if err != nil {
-		log.Fatal("ExtractTarGz: NewReader failed")
-	}
-
-	tarReader := tar.NewReader(uncompressedStream)
+func ExtractTarGz(stream io.Reader) {
+	fmt.Fprintln(os.Stderr, "Begin targz")
+	tarReader := tar.NewReader(stream)
 
 	for {
 		header, err := tarReader.Next()
@@ -32,19 +23,30 @@ func ExtractTarGz() {
 		if err != nil {
 			log.Fatalf("ExtractTarGz: Next() failed: %s", err.Error())
 		}
+		if strings.Contains(header.Name, "..") {
+			fmt.Fprintln(os.Stderr, header.Name)
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.Mkdir(header.Name, 0755); err != nil {
+			if header.Name == "./" {
+				continue
+			}
+			if err := os.MkdirAll(header.Name, header.FileInfo().Mode()); err != nil {
+				fmt.Fprintln(os.Stderr, header.Name)
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 		case tar.TypeReg:
 			writeFile(header.Name, tarReader)
+		case tar.TypeLink:
+			os.Link(header.Name, header.Linkname)
+		case tar.TypeSymlink:
+			os.Symlink(header.Name, header.Linkname)
 		default:
 			log.Fatal(
 				"ExtractTarGz: uknown type:",
 				header.Typeflag,
-				"in",
+				" in ",
 				header.Name)
 		}
 	}

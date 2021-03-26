@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -43,6 +44,7 @@ func main() {
 func writePartial(wg *sync.WaitGroup, start uint64, chunkSize uint64, curChan chan bool, nextChan chan bool, idx int) {
 	defer wg.Done()
 	client := &http.Client{}
+	buf := make([]byte, chunkSize)
 	for {
 		if start >= size {
 			return
@@ -56,9 +58,17 @@ func writePartial(wg *sync.WaitGroup, start uint64, chunkSize uint64, curChan ch
 		if err != nil {
 			log.Fatal("Failed get request:", err.Error())
 		}
+
+		totalRead := 0
+		for totalRead < int(resp.ContentLength) {
+			read, _ := resp.Body.Read(buf[totalRead:])
+			totalRead += read
+		}
+		r := bytes.NewReader(buf)
+
 		// Wait until previous worker finished before we start writing to stdout
 		<-curChan
-		_, err = io.Copy(os.Stdout, resp.Body)
+		_, err = io.Copy(os.Stdout, r)
 		if err != nil {
 			log.Fatal("io copy failed:", err.Error())
 		}

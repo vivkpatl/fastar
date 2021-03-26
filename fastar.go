@@ -20,7 +20,10 @@ var (
 
 func main() {
 	url = os.Args[1]
-	resp, _ := http.Head(url)
+	resp, err := http.Head(url)
+	if err != nil {
+		log.Fatal("Failed HEAD request for file size:", err.Error())
+	}
 	size = uint64(resp.ContentLength)
 	numWorkers, _ = strconv.Atoi(os.Args[2])
 	chunkSize, _ = strconv.ParseUint(os.Args[3], 10, 64)
@@ -45,6 +48,7 @@ func writePartial(wg *sync.WaitGroup, start uint64, chunkSize uint64, curChan ch
 	defer wg.Done()
 	client := &http.Client{}
 	buf := make([]byte, chunkSize)
+	r := bytes.NewReader(buf)
 	for {
 		if start >= size {
 			return
@@ -59,16 +63,39 @@ func writePartial(wg *sync.WaitGroup, start uint64, chunkSize uint64, curChan ch
 			log.Fatal("Failed get request:", err.Error())
 		}
 
-		totalRead := 0
-		for totalRead < int(resp.ContentLength) {
-			read, _ := resp.Body.Read(buf[totalRead:])
-			totalRead += read
+		// Read data off the wire and into an in memory buffer.
+		// If this is the first chunk of the file, no point in first
+		// reading it to a buffer before writing to stdout, we already need
+		// it *now*.
+		// For all other chunks, read them into an in memory buffer to greedily
+		// force the chunk to be read off the wire. Otherwise we'd still be
+		// bottlenecked by resp.Body.Read() when copying to stdout.
+		if start > 0 {
+			totalRead := 0
+			for totalRead < int(resp.ContentLength) {
+				read, err := resp.Body.Read(buf[totalRead:])
+				if err != nil {
+					log.Fatal("Failed to read from resp:", err.Error())
+				}
+				totalRead += read
+			}
 		}
-		r := bytes.NewReader(buf)
+		// Only slice the buffer for the case of the leftover data.
+		// I saw a marginal slowdown when always slicing (even if
+		// the slice was of the whole buffer)
+		if resp.ContentLength == int64(chunkSize) {
+			r.Reset(buf)
+		} else {
+			r.Reset(buf[:resp.ContentLength])
+		}
 
 		// Wait until previous worker finished before we start writing to stdout
 		<-curChan
-		_, err = io.Copy(os.Stdout, r)
+		if start > 0 {
+			_, err = io.Copy(os.Stdout, r)
+		} else {
+			_, err = io.Copy(os.Stdout, resp.Body)
+		}
 		if err != nil {
 			log.Fatal("io copy failed:", err.Error())
 		}

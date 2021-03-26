@@ -13,7 +13,7 @@ import (
 
 var openFileTokens chan bool
 
-func ExtractTarGz(stream io.Reader) {
+func ExtractTar(stream io.Reader) {
 	openFileTokens = make(chan bool, *writeWorkers)
 	fmt.Fprintln(os.Stderr, "Begin targz")
 	tarReader := tar.NewReader(stream)

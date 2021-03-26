@@ -74,7 +74,7 @@ func writePartial(wg *sync.WaitGroup, start uint64, chunkSize uint64, curChan ch
 			totalRead := 0
 			for totalRead < int(resp.ContentLength) {
 				read, err := resp.Body.Read(buf[totalRead:])
-				if err != nil {
+				if err != nil && err != io.EOF {
 					log.Fatal("Failed to read from resp:", err.Error())
 				}
 				totalRead += read

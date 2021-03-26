@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -17,8 +17,10 @@ func main() {
 	chunkSize, _ := strconv.ParseUint(os.Args[3], 10, 64)
 
 	size, fileStream := GetDownloadStream(url, chunkSize, numWorkers)
-	ExtractTarGz(io.LimitReader(fileStream, int64(size)))
+	ExtractTarGz(fileStream)
+	fmt.Fprintln(os.Stderr, size)
+	// ExtractTarGz(io.LimitReader(fileStream, int64(size)))
 	// io.CopyN(os.Stdout, fileStream, int64(size))
 
-	wg.Wait()
+	// wg.Wait()
 }

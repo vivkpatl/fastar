@@ -2,16 +2,26 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
-	"strings"
+	"path/filepath"
 )
+
+var openFiles = 1000
+var openFileTokens = make(chan bool, openFiles)
 
 func ExtractTarGz(stream io.Reader) {
 	fmt.Fprintln(os.Stderr, "Begin targz")
 	tarReader := tar.NewReader(stream)
+	target := "/home/cdenny/tmp/fastar"
+	for i := 0; i < openFiles; i++ {
+		openFileTokens <- true
+	}
+	fmt.Fprintln(os.Stderr, "got here")
 
 	for {
 		header, err := tarReader.Next()
@@ -19,29 +29,54 @@ func ExtractTarGz(stream io.Reader) {
 		if err == io.EOF {
 			break
 		}
-
 		if err != nil {
 			log.Fatalf("ExtractTarGz: Next() failed: %s", err.Error())
 		}
-		if strings.Contains(header.Name, "..") {
-			fmt.Fprintln(os.Stderr, header.Name)
-		}
+
+		path := filepath.Join(target, header.Name)
+		info := header.FileInfo()
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if header.Name == "./" {
+			if _, err = os.Stat(path); os.IsExist(err) {
 				continue
 			}
-			if err := os.MkdirAll(header.Name, header.FileInfo().Mode()); err != nil {
+			if err := os.MkdirAll(path, info.Mode()); err != nil {
 				fmt.Fprintln(os.Stderr, header.Name)
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 		case tar.TypeReg:
-			writeFile(header.Name, tarReader)
+			buf := make([]byte, info.Size())
+			totalRead := 0
+			for totalRead < int(info.Size()) {
+				read, err := tarReader.Read(buf[totalRead:])
+				if err != nil && err != io.EOF {
+					log.Fatal("Failed to read from resp:", err.Error())
+				}
+				totalRead += read
+			}
+			<-openFileTokens
+			go writeFileAsync(path, buf, info)
+			// writeFile(path, tarReader, info)
 		case tar.TypeLink:
-			os.Link(header.Name, header.Linkname)
+			// origDir, _ := filepath.Split(path)
+			newPath := filepath.Join(target, header.Linkname)
+			if _, err = os.Stat(newPath); os.IsNotExist(err) {
+				file, err := os.Create(newPath)
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer file.Close()
+			}
+			if err = os.Link(newPath, path); err != nil {
+				fmt.Fprintln(os.Stderr, header.Linkname)
+				fmt.Fprintln(os.Stderr, path)
+				log.Fatal("Failed to hardlink: ", err.Error())
+			}
 		case tar.TypeSymlink:
-			os.Symlink(header.Name, header.Linkname)
+			if err = os.Symlink(header.Linkname, path); err != nil {
+				log.Fatal("Failed to symlink: ", err.Error())
+			}
 		default:
 			log.Fatal(
 				"ExtractTarGz: uknown type:",
@@ -49,16 +84,32 @@ func ExtractTarGz(stream io.Reader) {
 				" in ",
 				header.Name)
 		}
+		os.Chtimes(path, info.ModTime(), info.ModTime())
 	}
 }
 
-func writeFile(filename string, tarReader *tar.Reader) {
-	file, err := os.Create(filename)
+func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
 	if err != nil {
-		log.Fatalf("ExtractTarGz: Create() failed: %s", err.Error())
+		log.Fatal("Create file failed: ", err.Error())
 	}
 	defer file.Close()
-	if _, err := io.Copy(file, tarReader); err != nil {
-		log.Fatalf("ExtractTarGz: Copy() failed: %s", err.Error())
+	_, err = io.Copy(file, tarReader)
+	if err != nil {
+		log.Fatal("Copy file failed: ", err.Error())
+	}
+}
+
+func writeFileAsync(filename string, buf []byte, info fs.FileInfo) {
+	// fmt.Fprintln(os.Stderr, "opening new file")
+	defer func() { openFileTokens <- true }()
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+	if err != nil {
+		log.Fatal("Create file failed: ", err.Error())
+	}
+	defer file.Close()
+	_, err = io.Copy(file, bytes.NewReader(buf))
+	if err != nil {
+		log.Fatal("Copy file failed: ", err.Error())
 	}
 }

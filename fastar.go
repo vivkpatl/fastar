@@ -14,7 +14,7 @@ var (
 	numWorkers   = kingpin.Flag("download-workers", "How many parallel workers to download the file").Default("8").Int()
 	chunkSize    = kingpin.Flag("chunk-size", "Size of file chunks (in MB) to pull in parallel").Default("100").Uint64()
 	outputDir    = kingpin.Flag("directory", "Directory to extract tarball to. Dumps file to stdout if not specified.").Short('C').ExistingDir()
-	writeWorkers = kingpin.Flag("write-workers", "How many parallel workers to use to write file to disk").Default("1").Int()
+	writeWorkers = kingpin.Flag("write-workers", "How many parallel workers to use to write file to disk").Default("8").Int()
 )
 
 func main() {

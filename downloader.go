@@ -2,13 +2,10 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
-	"sync"
 )
 
 func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io.Reader) {
@@ -18,10 +15,6 @@ func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io
 	}
 	size := uint64(resp.ContentLength)
 
-	fmt.Fprintln(os.Stderr, "File Size: "+strconv.FormatUint(size, 10))
-	fmt.Fprintln(os.Stderr, "Num Workers: "+strconv.Itoa(numWorkers))
-	fmt.Fprintln(os.Stderr, "Chunk Size: "+strconv.FormatUint(chunkSize, 10))
-
 	var chans []chan bool
 	for i := 0; i < numWorkers; i++ {
 		chans = append(chans, make(chan bool))
@@ -30,9 +23,7 @@ func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io
 	reader, writer := io.Pipe()
 
 	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
 		go writePartial(
-			&wg,
 			url,
 			size,
 			uint64(i)*chunkSize,
@@ -48,7 +39,6 @@ func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io
 }
 
 func writePartial(
-	wg *sync.WaitGroup,
 	url string,
 	size uint64,
 	start uint64,
@@ -59,7 +49,6 @@ func writePartial(
 	nextChan chan bool,
 	idx int) {
 
-	defer wg.Done()
 	client := &http.Client{}
 	buf := make([]byte, chunkSize)
 	r := bytes.NewReader(buf)

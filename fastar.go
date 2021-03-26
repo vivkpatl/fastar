@@ -2,25 +2,34 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
-	"sync"
+
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
-	wg = sync.WaitGroup{}
+	url          = kingpin.Arg("url", "URL to download from").Required().String()
+	numWorkers   = kingpin.Flag("download-workers", "How many parallel workers to download the file").Default("8").Int()
+	chunkSize    = kingpin.Flag("chunk-size", "Size of file chunks (in MB) to pull in parallel").Default("100").Uint64()
+	outputDir    = kingpin.Flag("directory", "Directory to extract tarball to. Dumps file to stdout if not specified.").Short('C').ExistingDir()
+	writeWorkers = kingpin.Flag("write-workers", "How many parallel workers to use to write file to disk").Default("1").Int()
 )
 
 func main() {
-	url := os.Args[1]
-	numWorkers, _ := strconv.Atoi(os.Args[2])
-	chunkSize, _ := strconv.ParseUint(os.Args[3], 10, 64)
+	kingpin.Parse()
+	*chunkSize = *chunkSize * 1000000
+	size, fileStream := GetDownloadStream(*url, *chunkSize, *numWorkers)
 
-	size, fileStream := GetDownloadStream(url, chunkSize, numWorkers)
-	ExtractTarGz(fileStream)
-	fmt.Fprintln(os.Stderr, size)
-	// ExtractTarGz(io.LimitReader(fileStream, int64(size)))
-	// io.CopyN(os.Stdout, fileStream, int64(size))
+	fmt.Fprintln(os.Stderr, "File Size: "+strconv.FormatUint(size, 10))
+	fmt.Fprintln(os.Stderr, "Num Download Workers: "+strconv.Itoa(*numWorkers))
+	fmt.Fprintln(os.Stderr, "Chunk Size: "+strconv.FormatUint(*chunkSize, 10))
+	fmt.Fprintln(os.Stderr, "Num Disk Workers: "+strconv.Itoa(*writeWorkers))
 
-	// wg.Wait()
+	if *outputDir == "" {
+		io.CopyN(os.Stdout, fileStream, int64(size))
+	} else {
+		ExtractTarGz(fileStream)
+	}
 }

@@ -11,17 +11,15 @@ import (
 	"path/filepath"
 )
 
-var openFiles = 1000
-var openFileTokens = make(chan bool, openFiles)
+var openFileTokens chan bool
 
 func ExtractTarGz(stream io.Reader) {
+	openFileTokens = make(chan bool, *writeWorkers)
 	fmt.Fprintln(os.Stderr, "Begin targz")
 	tarReader := tar.NewReader(stream)
-	target := "/home/cdenny/tmp/fastar"
-	for i := 0; i < openFiles; i++ {
+	for i := 0; i < *writeWorkers; i++ {
 		openFileTokens <- true
 	}
-	fmt.Fprintln(os.Stderr, "got here")
 
 	for {
 		header, err := tarReader.Next()
@@ -33,7 +31,7 @@ func ExtractTarGz(stream io.Reader) {
 			log.Fatalf("ExtractTarGz: Next() failed: %s", err.Error())
 		}
 
-		path := filepath.Join(target, header.Name)
+		path := filepath.Join(*outputDir, header.Name)
 		info := header.FileInfo()
 
 		switch header.Typeflag {
@@ -42,7 +40,6 @@ func ExtractTarGz(stream io.Reader) {
 				continue
 			}
 			if err := os.MkdirAll(path, info.Mode()); err != nil {
-				fmt.Fprintln(os.Stderr, header.Name)
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 		case tar.TypeReg:
@@ -60,7 +57,7 @@ func ExtractTarGz(stream io.Reader) {
 			// writeFile(path, tarReader, info)
 		case tar.TypeLink:
 			// origDir, _ := filepath.Split(path)
-			newPath := filepath.Join(target, header.Linkname)
+			newPath := filepath.Join(*outputDir, header.Linkname)
 			if _, err = os.Stat(newPath); os.IsNotExist(err) {
 				file, err := os.Create(newPath)
 				if err != nil {
@@ -69,8 +66,6 @@ func ExtractTarGz(stream io.Reader) {
 				defer file.Close()
 			}
 			if err = os.Link(newPath, path); err != nil {
-				fmt.Fprintln(os.Stderr, header.Linkname)
-				fmt.Fprintln(os.Stderr, path)
 				log.Fatal("Failed to hardlink: ", err.Error())
 			}
 		case tar.TypeSymlink:
@@ -101,7 +96,6 @@ func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
 }
 
 func writeFileAsync(filename string, buf []byte, info fs.FileInfo) {
-	// fmt.Fprintln(os.Stderr, "opening new file")
 	defer func() { openFileTokens <- true }()
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
 	if err != nil {

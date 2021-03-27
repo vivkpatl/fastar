@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"bytes"
-	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -15,7 +14,6 @@ var openFileTokens chan bool
 
 func ExtractTar(stream io.Reader) {
 	openFileTokens = make(chan bool, *writeWorkers)
-	fmt.Fprintln(os.Stderr, "Begin targz")
 	tarReader := tar.NewReader(stream)
 	for i := 0; i < *writeWorkers; i++ {
 		openFileTokens <- true
@@ -56,7 +54,6 @@ func ExtractTar(stream io.Reader) {
 			go writeFileAsync(path, buf, info)
 			// writeFile(path, tarReader, info)
 		case tar.TypeLink:
-			// origDir, _ := filepath.Split(path)
 			newPath := filepath.Join(*outputDir, header.Linkname)
 			if _, err = os.Stat(newPath); os.IsNotExist(err) {
 				file, err := os.Create(newPath)

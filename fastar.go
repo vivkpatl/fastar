@@ -2,6 +2,8 @@ package main
 
 import (
 	"compress/gzip"
+	"fastar/http"
+	"fastar/s3"
 	"fmt"
 	"io"
 	"log"
@@ -26,7 +28,13 @@ var (
 func main() {
 	kingpin.Parse()
 	*chunkSize = *chunkSize * 1000000
-	size, fileStream := GetDownloadStream(*rawUrl, *chunkSize, *numWorkers)
+	var size uint64
+	var fileStream io.Reader
+	if strings.HasPrefix(*rawUrl, "s3") {
+		size, fileStream = s3.GetDownloadStream(*rawUrl, *chunkSize, *numWorkers)
+	} else {
+		size, fileStream = http.GetDownloadStream(*rawUrl, *chunkSize, *numWorkers)
+	}
 
 	url, err := url.Parse(*rawUrl)
 	if err != nil {

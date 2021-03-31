@@ -17,7 +17,7 @@ func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io
 
 	var chans []chan bool
 	for i := 0; i < numWorkers; i++ {
-		chans = append(chans, make(chan bool))
+		chans = append(chans, make(chan bool, 1))
 	}
 
 	reader, writer := io.Pipe()
@@ -65,6 +65,7 @@ func writePartial(
 		if err != nil {
 			log.Fatal("Failed get request:", err.Error())
 		}
+		defer resp.Body.Close()
 
 		// Read data off the wire and into an in memory buffer.
 		// If this is the first chunk of the file, no point in first

@@ -27,7 +27,7 @@ var (
 
 func main() {
 	kingpin.Parse()
-	*chunkSize = *chunkSize * 1000000
+	*chunkSize = *chunkSize << 20
 	var size uint64
 	var fileStream io.Reader
 	if strings.HasPrefix(*rawUrl, "s3") {
@@ -43,9 +43,9 @@ func main() {
 	filename := path.Base(url.Path)
 
 	fmt.Fprintln(os.Stderr, "File name: "+filename)
-	fmt.Fprintln(os.Stderr, "File Size: "+strconv.FormatUint(size, 10))
+	fmt.Fprintln(os.Stderr, "File Size (MiB): "+strconv.FormatUint(size>>20, 10))
 	fmt.Fprintln(os.Stderr, "Num Download Workers: "+strconv.Itoa(*numWorkers))
-	fmt.Fprintln(os.Stderr, "Chunk Size: "+strconv.FormatUint(*chunkSize, 10))
+	fmt.Fprintln(os.Stderr, "Chunk Size (Mib): "+strconv.FormatUint(*chunkSize>>20, 10))
 	fmt.Fprintln(os.Stderr, "Num Disk Workers: "+strconv.Itoa(*writeWorkers))
 
 	var finalStream io.Reader

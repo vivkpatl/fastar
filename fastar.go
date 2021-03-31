@@ -64,7 +64,7 @@ func main() {
 	}
 
 	if *outputDir == "" {
-		io.CopyN(os.Stdout, finalStream, int64(size))
+		io.Copy(os.Stdout, finalStream)
 	} else {
 		ExtractTar(finalStream)
 	}

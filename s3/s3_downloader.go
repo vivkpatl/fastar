@@ -70,7 +70,7 @@ func writePartial(
 	start uint64,
 	chunkSize uint64,
 	numWorkers int,
-	writer io.Writer,
+	writer *io.PipeWriter,
 	curChan chan bool,
 	nextChan chan bool,
 	idx int) {
@@ -136,6 +136,8 @@ func writePartial(
 		// for a token.
 		if start+chunkSize < size {
 			nextChan <- true
+		} else {
+			writer.Close()
 		}
 		start += (chunkSize * uint64(numWorkers))
 	}

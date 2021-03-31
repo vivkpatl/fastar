@@ -51,6 +51,7 @@ func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io
 			bucket,
 			key,
 			size,
+			svc,
 			uint64(i)*chunkSize,
 			chunkSize,
 			numWorkers,
@@ -67,6 +68,7 @@ func writePartial(
 	bucket string,
 	key string,
 	size uint64,
+	svc *s3.S3,
 	start uint64,
 	chunkSize uint64,
 	numWorkers int,
@@ -75,8 +77,6 @@ func writePartial(
 	nextChan chan bool,
 	idx int) {
 
-	sess := session.Must(session.NewSession())
-	svc := s3.New(sess)
 	buf := make([]byte, chunkSize)
 	r := bytes.NewReader(buf)
 	for {
@@ -134,6 +134,8 @@ func writePartial(
 		// Only send token if next worker has more work to do,
 		// otherwise they already exited and won't be waiting
 		// for a token.
+		// If next worker doesn't have work, we're handline
+		// the last chunk so close the writer.
 		if start+chunkSize < size {
 			nextChan <- true
 		} else {

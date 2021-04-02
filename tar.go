@@ -40,6 +40,7 @@ func ExtractTar(stream io.Reader) {
 			if err := os.MkdirAll(path, info.Mode()); err != nil {
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
+			os.Chmod(path, info.Mode())
 		case tar.TypeReg:
 			buf := make([]byte, info.Size())
 			totalRead := 0
@@ -81,10 +82,13 @@ func ExtractTar(stream io.Reader) {
 }
 
 func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
+	// passing in info.Mode() here doesn't even create the file with Mode() bits???
+	// call os.Chmod afterwards with the same bits to fix this =_=
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
 	if err != nil {
 		log.Fatal("Create file failed: ", err.Error())
 	}
+	defer os.Chmod(filename, info.Mode())
 	defer file.Close()
 	_, err = io.Copy(file, tarReader)
 	if err != nil {
@@ -94,10 +98,13 @@ func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
 
 func writeFileAsync(filename string, buf []byte, info fs.FileInfo) {
 	defer func() { openFileTokens <- true }()
+	// passing in info.Mode() here doesn't even create the file with Mode() bits???
+	// call os.Chmod afterwards with the same bits to fix this =_=
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
 	if err != nil {
 		log.Fatal("Create file failed: ", err.Error())
 	}
+	defer os.Chmod(filename, info.Mode())
 	defer file.Close()
 	_, err = io.Copy(file, bytes.NewReader(buf))
 	if err != nil {

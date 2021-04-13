@@ -23,6 +23,7 @@ func getBucketAndKey(url string) (string, string) {
 	return bucket, key
 }
 
+// TODO: dedup this logic with the same in http_downloader.go
 func GetDownloadStream(url string, chunkSize uint64, numWorkers int) (uint64, io.Reader) {
 	bucket, key := getBucketAndKey(url)
 	sess := session.Must(session.NewSession())

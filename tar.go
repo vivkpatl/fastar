@@ -87,7 +87,7 @@ func ExtractTar(stream io.Reader) {
 func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
 	// passing in info.Mode() here doesn't even create the file with Mode() bits???
 	// call os.Chmod afterwards with the same bits to fix this =_=
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode().Perm())
 	if err != nil {
 		log.Fatal("Create file failed: ", err.Error())
 	}
@@ -104,7 +104,7 @@ func writeFileAsync(filename string, buf []byte, info fs.FileInfo, wg *sync.Wait
 	defer func() { openFileTokens <- true }()
 	// passing in info.Mode() here doesn't even create the file with Mode() bits???
 	// call os.Chmod afterwards with the same bits to fix this =_=
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode().Perm())
 	if err != nil {
 		log.Fatal("Create file failed: ", err.Error())
 	}

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 var openFileTokens chan bool
@@ -18,6 +19,7 @@ func ExtractTar(stream io.Reader) {
 	for i := 0; i < *writeWorkers; i++ {
 		openFileTokens <- true
 	}
+	var wg sync.WaitGroup
 
 	for {
 		header, err := tarReader.Next()
@@ -40,7 +42,7 @@ func ExtractTar(stream io.Reader) {
 			if err := os.MkdirAll(path, info.Mode()); err != nil {
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
-			os.Chmod(path, info.Mode())
+			os.Chmod(path, info.Mode().Perm()&0755)
 		case tar.TypeReg:
 			buf := make([]byte, info.Size())
 			totalRead := 0
@@ -52,7 +54,8 @@ func ExtractTar(stream io.Reader) {
 				totalRead += read
 			}
 			<-openFileTokens
-			go writeFileAsync(path, buf, info)
+			wg.Add(1)
+			go writeFileAsync(path, buf, info, &wg)
 			// writeFile(path, tarReader, info)
 		case tar.TypeLink:
 			newPath := filepath.Join(*outputDir, header.Linkname)
@@ -77,8 +80,8 @@ func ExtractTar(stream io.Reader) {
 				" in ",
 				header.Name)
 		}
-		os.Chtimes(path, info.ModTime(), info.ModTime())
 	}
+	wg.Wait()
 }
 
 func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
@@ -88,7 +91,7 @@ func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
 	if err != nil {
 		log.Fatal("Create file failed: ", err.Error())
 	}
-	defer os.Chmod(filename, info.Mode())
+	defer os.Chmod(filename, info.Mode().Perm()&0755)
 	defer file.Close()
 	_, err = io.Copy(file, tarReader)
 	if err != nil {
@@ -96,7 +99,8 @@ func writeFile(filename string, tarReader *tar.Reader, info fs.FileInfo) {
 	}
 }
 
-func writeFileAsync(filename string, buf []byte, info fs.FileInfo) {
+func writeFileAsync(filename string, buf []byte, info fs.FileInfo, wg *sync.WaitGroup) {
+	defer wg.Done()
 	defer func() { openFileTokens <- true }()
 	// passing in info.Mode() here doesn't even create the file with Mode() bits???
 	// call os.Chmod afterwards with the same bits to fix this =_=
@@ -104,7 +108,7 @@ func writeFileAsync(filename string, buf []byte, info fs.FileInfo) {
 	if err != nil {
 		log.Fatal("Create file failed: ", err.Error())
 	}
-	defer os.Chmod(filename, info.Mode())
+	defer os.Chmod(filename, info.Mode().Perm()&0755)
 	defer file.Close()
 	_, err = io.Copy(file, bytes.NewReader(buf))
 	if err != nil {

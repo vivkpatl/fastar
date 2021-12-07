@@ -1,6 +1,6 @@
 # fastar
 
-A faster way to download and extract tarballs.
+A faster way to download and extract tarballs. (If you want perf numbers, jump to bottom)
 
 ## Motivation
 

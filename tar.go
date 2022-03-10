@@ -12,6 +12,12 @@ import (
 	"sync"
 )
 
+// Used to limit the number of background workers writing
+// files at any one time.
+// Channel of size $writeWorkers filled with bool tokens.
+// In main thread hot path we block until a token is free
+// to take, this token is then returned to the channel when
+// the background writer thread is finished.
 var openFileTokens chan bool
 
 func ExtractTar(stream io.Reader) {
@@ -20,6 +26,12 @@ func ExtractTar(stream io.Reader) {
 	for i := 0; i < *writeWorkers; i++ {
 		openFileTokens <- true
 	}
+	// Hard linking is special, we need to make sure the file we're
+	// linking to exists when creating the hard link.
+	// For each hard link we essentially "stop the world." We stop
+	// issuing any more file writes and wait on this WaitGroup for
+	// all existing writes to finish (one of them might be the file
+	// we need to link to).
 	var wg sync.WaitGroup
 
 	for {
@@ -54,12 +66,16 @@ func ExtractTar(stream io.Reader) {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
+			// Directories are synchronously created since a later file
+			// might require it exist already.
 			if err := os.MkdirAll(path, info.Mode()); err != nil {
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 			os.Chmod(path, info.Mode())
 			os.Chown(path, header.Uid, header.Gid)
 		case tar.TypeReg:
+			// Read file contents into a buffer to pass along to background
+			// writer thread.
 			buf := make([]byte, info.Size())
 			totalRead := 0
 			for totalRead < int(info.Size()) {
@@ -76,6 +92,9 @@ func ExtractTar(stream io.Reader) {
 			newPath := filepath.Join(*outputDir, linkName)
 			hardLink(newPath, path, header, &wg)
 		case tar.TypeSymlink:
+			// Symlinks don't require the stop-the-world synchronization
+			// of hard links since they don't require the source file
+			// to exist.
 			if *overwrite {
 				if _, err := os.Lstat(path); err == nil {
 					os.Remove(path)
@@ -102,6 +121,8 @@ func ExtractTar(stream io.Reader) {
 			}
 		}
 	}
+	// Wait for all threads to finish, otherwise fastar
+	// might exit before last few files done writing.
 	wg.Wait()
 }
 
@@ -127,8 +148,6 @@ func writeFileAsync(filename string, buf []byte, header *tar.Header, wg *sync.Wa
 }
 
 func hardLink(newPath string, path string, header *tar.Header, wg *sync.WaitGroup) {
-	// Wait for all in progress files to finish in case one of them
-	// is what we need to hard link to
 	wg.Wait()
 
 	if *overwrite {

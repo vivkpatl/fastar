@@ -32,6 +32,10 @@ var (
 	headers         = kingpin.Flag("headers", "Headers to use with http request").Short('H').PlaceHolder("HEADER:VALUE").StringMap()
 )
 
+// Magic byte sequences prepended to the start of every gzip or lz4
+// compressed bundle. When downloading a file we can check for either
+// of these sequences to automatically infer if we need to perform
+// decompression, as well as which compression schema was used.
 const (
 	gzipMagicNumber = "1f8b"
 	lz4MagicNumber  = "04224d18"
@@ -89,6 +93,9 @@ func main() {
 	}
 }
 
+// Reads first few bytes from file stream to get any possible
+// magic numbers, returns a spliced-together reader since
+// the original io.Reader has already been read from.
 func getMagicNumber(reader io.Reader) (string, io.Reader) {
 	buf := make([]byte, 4)
 	totalRead := 0
@@ -107,6 +114,11 @@ func getMagicNumber(reader io.Reader) (string, io.Reader) {
 	return magicNumber, splicedStream
 }
 
+// Choose compression type by the following preference order:
+// 1. User provided compression type flag
+// 2. Inferred by magic number
+// 3. Inferred by file extension prefix in URL
+// 4. Default to raw tarball
 func getCompressionType(filename string, magicNumber string) CompressionType {
 	if *compression != "" {
 		if *compression == "tar" {

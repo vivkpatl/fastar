@@ -22,10 +22,8 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool) {
 	if err != nil {
 		log.Fatal("Failed creating GET request:", err.Error())
 	}
-	if len(*headers) > 0 {
-		for key, value := range *headers {
-			req.Header.Add(key, value)
-		}
+	for key, value := range *headers {
+		req.Header.Add(key, value)
 	}
 	var resp *http.Response
 	err = retry.Do(
@@ -52,6 +50,10 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool) {
 	}
 	var supportsRange bool
 	if resp.ContentLength > 1 {
+		// Dumb hack to see if the download source supports range requests.
+		// Some servers don't publish `Accept-Ranges: bytes` for a HEAD response
+		// even if they support RANGE. To determine, we intentionally make a
+		// request for less than the full size and see if it's respected.
 		bound := int64(math.Max(0, float64(resp.ContentLength-1)))
 		_, size := httpDownloader.GetRanges([]int64{0, bound})
 		supportsRange = size == bound
@@ -76,10 +78,8 @@ func (httpDownloader HttpDownloader) GetRanges(ranges []int64) (io.ReadCloser, i
 	if len(ranges) != 0 {
 		req.Header.Add("Range", rangeString)
 	}
-	if len(*headers) > 0 {
-		for key, value := range *headers {
-			req.Header.Add(key, value)
-		}
+	for key, value := range *headers {
+		req.Header.Add(key, value)
 	}
 	var resp *http.Response
 	err = retry.Do(

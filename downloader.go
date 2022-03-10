@@ -27,6 +27,13 @@ type Downloader interface {
 	GetRanges(ranges []int64) (io.ReadCloser, int64)
 }
 
+// Returns a single io.Reader byte stream that transparently makes use of parallel
+// workers to speed up download.
+//
+// Infers s3 vs http download source by the url (should I include a flag to force this?)
+//
+// Will fall back to a single download stream if the download source doesn't support
+// RANGE requests or if the total file is smaller than a single download chunk.
 func GetDownloadStream(url string, chunkSize int64, numWorkers int) io.Reader {
 	var downloader Downloader
 	if strings.HasPrefix(url, "s3") {
@@ -41,11 +48,17 @@ func GetDownloadStream(url string, chunkSize int64, numWorkers int) io.Reader {
 	}
 	fmt.Fprintln(os.Stderr, "File Size (MiB): "+strconv.FormatInt(size>>20, 10))
 
+	// Bool channels used to synchronize when workers write to the output stream.
+	// Each worker sleeps until a token is pushed to their channel by the previous
+	// worker. When they finish writing their current chunk they push a token to
+	// the next worker.
 	var chans []chan bool
 	for i := 0; i < numWorkers; i++ {
 		chans = append(chans, make(chan bool, 1))
 	}
 
+	// All workers share a single writer pipe, the reader side is used by the
+	// eventual consumer.
 	reader, writer := io.Pipe()
 
 	for i := 0; i < numWorkers; i++ {
@@ -57,23 +70,22 @@ func GetDownloadStream(url string, chunkSize int64, numWorkers int) io.Reader {
 			numWorkers,
 			writer,
 			chans[i],
-			chans[(i+1)%numWorkers],
-			i)
+			chans[(i+1)%numWorkers])
 	}
 	chans[0] <- true
 	return reader
 }
 
+// Individual worker thread entry function
 func writePartial(
 	downloader Downloader,
-	size int64,
-	start int64,
+	size int64, // total file size
+	start int64, // the starting offset for the first chunk for this worker
 	chunkSize int64,
 	numWorkers int,
 	writer *io.PipeWriter,
 	curChan chan bool,
-	nextChan chan bool,
-	idx int) {
+	nextChan chan bool) {
 
 	var err error
 	buf := make([]byte, chunkSize)

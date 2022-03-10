@@ -7,6 +7,7 @@ import (
 	"github.com/didip/tollbooth"
 )
 
+// Quick local http fileserver with rate limiting for e2e tests
 func main() {
 	fs := http.FileServer(http.Dir("/tmp"))
 	limiter := tollbooth.LimitHandler(tollbooth.NewLimiter(5, nil), fs)

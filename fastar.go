@@ -28,13 +28,13 @@ var (
 	compression     = kingpin.Flag("compression", "Force specific compression schema instead of inferring from magic bytes and filename extension (tar, gzip, or lz4)").Enum("tar", "gzip", "lz4")
 	retryCount      = kingpin.Flag("retry-count", "Max number of retries for a single chunk").Default("2").Int()
 	retryWait       = kingpin.Flag("retry-wait", "Max number of seconds to wait in between retries (with jitter)").Default("2").Int()
-	minSpeed        = kingpin.Flag("min-speed", "Minimum speed per each chunk download. Fails if any are slower than this. 0 for no min speed, append K or M for KBps or MBps.").Default("1K").String()
+	minSpeed        = kingpin.Flag("min-speed", "Minimum speed per each chunk download. Retries and then fails if any are slower than this. 0 for no min speed, append K or M for KBps or MBps.").Default("1K").String()
 	connTimeout     = kingpin.Flag("connection-timeout", "Abort download if TCP dial takes longer than this many seconds").Default("60").Int()
 	ignoreNodeFiles = kingpin.Flag("ignore-node-files", "Don't throw errors on character or block device nodes").Default("false").Bool()
 	overwrite       = kingpin.Flag("overwrite", "Overwrite any existing files").Default("false").Bool()
 	headers         = kingpin.Flag("headers", "Headers to use with http request").Short('H').PlaceHolder("HEADER:VALUE").StringMap()
 
-	minSpeedBytesPerNanosecond = 0.0
+	minSpeedBytesPerMillisecond = 0.0
 )
 
 // Magic byte sequences prepended to the start of every gzip or lz4
@@ -185,5 +185,5 @@ func processMinSpeedFlag() {
 			log.Fatal("Failed to parse min speed argument", minSpeed, err.Error())
 		}
 	}
-	minSpeedBytesPerNanosecond = float64(bytesPerSecond) / 1e9
+	minSpeedBytesPerMillisecond = float64(bytesPerSecond) / 1e3
 }

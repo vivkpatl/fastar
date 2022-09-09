@@ -35,7 +35,7 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
 			// request for less than the full size and see if it's respected.
 			body := httpDownloader.GetRange(0, 1)
 			buf, err := io.ReadAll(body)
-			return resp.ContentLength, (err != nil && len(buf) == 1), false
+			return resp.ContentLength, (err == nil && len(buf) == 1), false
 		}
 	} else {
 		// If the file is tiny it doesn't matter if we support any kind

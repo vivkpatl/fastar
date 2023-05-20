@@ -76,11 +76,11 @@ func (testDownloader TestDownloader) GetRanges(ranges [][]int64) (*multipart.Rea
 }
 
 func TestSingleReader(t *testing.T) {
-	for fileSize := int64(0); fileSize < 10; fileSize++ {
+	for fileSize := int64(0); fileSize < 32; fileSize++ {
 		data := RandomString(fileSize)
 		downloader := TestDownloader{data, false, false}
-		for chunkSize := int64(0); chunkSize < 21; chunkSize++ {
-			for _, numWorkers := range []int{1, 2} {
+		for chunkSize := int64(0); chunkSize < 32; chunkSize++ {
+			for numWorkers := 1; numWorkers < 32; numWorkers++ {
 				if bytes, err := io.ReadAll(GetDownloadStream(downloader, chunkSize, numWorkers)); err == nil {
 					actual := string(bytes)
 					if actual != data {
@@ -95,11 +95,11 @@ func TestSingleReader(t *testing.T) {
 }
 
 func TestRangeReader(t *testing.T) {
-	for fileSize := int64(0); fileSize < 10; fileSize++ {
+	for fileSize := int64(0); fileSize < 32; fileSize++ {
 		data := RandomString(fileSize)
 		downloader := TestDownloader{data, true, false}
-		for chunkSize := int64(1); chunkSize < 21; chunkSize++ {
-			for _, numWorkers := range []int{1, 2} {
+		for chunkSize := int64(1); chunkSize < 32; chunkSize++ {
+			for numWorkers := 1; numWorkers < 32; numWorkers++ {
 				if bytes, err := io.ReadAll(GetDownloadStream(downloader, chunkSize, numWorkers)); err == nil {
 					actual := string(bytes)
 					if actual != data {
@@ -114,11 +114,11 @@ func TestRangeReader(t *testing.T) {
 }
 
 func TestMultipartRangeReader(t *testing.T) {
-	for fileSize := int64(0); fileSize < 10; fileSize++ {
+	for fileSize := int64(0); fileSize < 32; fileSize++ {
 		data := RandomString(fileSize)
 		downloader := TestDownloader{data, true, true}
-		for chunkSize := int64(1); chunkSize < 21; chunkSize++ {
-			for _, numWorkers := range []int{1, 2} {
+		for chunkSize := int64(1); chunkSize < 32; chunkSize++ {
+			for numWorkers := 1; numWorkers < 32; numWorkers++ {
 				if bytes, err := io.ReadAll(GetDownloadStream(downloader, chunkSize, numWorkers)); err == nil {
 					actual := string(bytes)
 					if actual != data {

@@ -1,9 +1,14 @@
 package main
 
 import (
+	"errors"
+	"flag"
+	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"mime/multipart"
+	"os"
 )
 
 // Helper struct to abstract away the complexity of single vs multi part
@@ -18,15 +23,16 @@ type Reader struct {
 	SupportsMultipart bool
 	Downloader        Downloader
 	// Can change over reader lifecycle
-	Start, CurPos   int64
-	Chunk           io.ReadCloser
-	MultipartReader *multipart.Reader
-	MultipartChunk  *multipart.Part
+	Start, CurChunkStart, CurPos int64
+	Chunk                        io.ReadCloser
+	MultipartReader              *multipart.Reader
+	MultipartChunk               *multipart.Part
 }
 
 func NewReader(size, start, chunkSize int64, numWorkers int, supportsMultipart bool, downloader Downloader) *Reader {
 	r := &Reader{
 		Start:             start,
+		CurChunkStart:     start,
 		CurPos:            start,
 		Size:              size,
 		ChunkSize:         chunkSize,
@@ -34,24 +40,26 @@ func NewReader(size, start, chunkSize int64, numWorkers int, supportsMultipart b
 		SupportsMultipart: supportsMultipart,
 		Downloader:        downloader,
 	}
-	r.Reset()
+	r.Reset(start)
 	return r
 }
 
 // Reset all volatile state to start over reading contents from the current position.
 // Useful if we abort a chunk midway and need to restart our progress from that chunk.
-func (r *Reader) Reset() {
-	r.Start = r.CurPos
+func (r *Reader) Reset(curPos int64) {
+	r.Start = r.CurChunkStart
+	r.CurPos = curPos
 	if r.UseMultipart() {
-		r.MultipartReader = getMultipartReader(r.Downloader, r.Start, r.ChunkSize, r.Size, r.NumWorkers)
+		r.MultipartReader = getMultipartReader(r.Downloader, curPos, r.CurChunkStart, r.ChunkSize, r.Size, r.NumWorkers)
 	}
 }
 
 func (r *Reader) AdvanceNextChunk() {
-	r.CurPos += (r.ChunkSize * int64(r.NumWorkers))
+	r.CurChunkStart += (r.ChunkSize * int64(r.NumWorkers))
+	r.CurPos = r.CurChunkStart
 }
 
-func (r *Reader) RequestNextChunk() {
+func (r *Reader) RequestChunk() {
 	if r.UseMultipart() {
 		if multiChunk, err := r.MultipartReader.NextPart(); err == nil {
 			r.MultipartChunk = multiChunk
@@ -59,11 +67,15 @@ func (r *Reader) RequestNextChunk() {
 			log.Fatal("Error getting next multipart chunk:", err.Error())
 		}
 	} else {
-		r.Chunk = r.Downloader.GetRange(r.CurPos, min(r.CurPos+r.ChunkSize, r.Size))
+		r.Chunk = r.Downloader.GetRange(r.CurPos, min(r.CurChunkStart+r.ChunkSize, r.Size))
 	}
 }
 
 func (r *Reader) Read(d []byte) (int, error) {
+	if flag.Lookup("test.v") != nil && rand.Intn(100) < 95 {
+		// We're running as part of a unit test, randomly fail read calls 95% of the time
+		return 0, errors.New("forced read fail for testing")
+	}
 	if r.UseMultipart() {
 		return r.MultipartChunk.Read(d)
 	} else {
@@ -72,10 +84,13 @@ func (r *Reader) Read(d []byte) (int, error) {
 }
 
 func (r *Reader) Close() error {
-	if r.UseMultipart() {
+	if r.UseMultipart() && r.MultipartChunk != nil {
 		return r.MultipartChunk.Close()
-	} else {
+	} else if !r.UseMultipart() && r.Chunk != nil {
 		return r.Chunk.Close()
+	} else {
+		fmt.Fprintln(os.Stderr, "Attempting to close nil chunk, silently succeeding")
+		return nil
 	}
 }
 
@@ -88,12 +103,15 @@ func (r *Reader) UseMultipart() bool {
 
 func getMultipartReader(
 	downloader Downloader,
-	start int64,
+	curPos int64,
+	curChunkStart int64,
 	chunkSize int64,
 	size int64,
 	numWorkers int) *multipart.Reader {
 	var ranges = [][]int64{}
-	var curChunkStart = start
+	// First chunk might start at curPos if we're resetting the reader midway through a chunk
+	ranges = append(ranges, []int64{curPos, min(curChunkStart+chunkSize, size)})
+	curChunkStart += (chunkSize * int64(numWorkers))
 	for curChunkStart < size {
 		ranges = append(ranges, []int64{curChunkStart, min(curChunkStart+chunkSize, size)})
 		curChunkStart += (chunkSize * int64(numWorkers))

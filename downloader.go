@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -13,10 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"golang.org/x/sys/unix"
+	"google.golang.org/api/option"
 )
 
 // Generate inclusive-inclusive range header string from the array
@@ -69,6 +72,21 @@ func GetDownloader(url string) Downloader {
 	}
 	if strings.HasPrefix(url, "s3") {
 		return S3Downloader{url, s3.New(session.Must(session.NewSession(&aws.Config{HTTPClient: &httpClient})))}
+	} else if strings.HasPrefix(url, "gs") {
+		options := []option.ClientOption{}
+		credsJSON := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+		if credsJSON != "" {
+			options = append(options, option.WithCredentialsJSON([]byte(credsJSON)))
+		}
+		client, err := storage.NewClient(
+			context.Background(),
+			options...,
+		)
+		if err != nil {
+			fmt.Println("Failed to create GCS client: ", err)
+			return nil
+		}
+		return GCSDownloader{url, client, time.Duration(opts.ConnTimeout) * time.Second}
 	} else {
 		return HttpDownloader{url, &httpClient}
 	}

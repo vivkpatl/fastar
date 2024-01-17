@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -13,10 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"golang.org/x/sys/unix"
+	"google.golang.org/api/option"
 )
 
 // Generate inclusive-inclusive range header string from the array
@@ -58,6 +61,7 @@ type Downloader interface {
 }
 
 func GetDownloader(url string) Downloader {
+	// NOTE: Only S3 + HTTP downloaders use this transport. GCS uses the default transport configured by the SDK.
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
 			Timeout: time.Duration(opts.ConnTimeout) * time.Second,
@@ -67,8 +71,27 @@ func GetDownloader(url string) Downloader {
 	var httpClient = http.Client{
 		Transport: netTransport,
 	}
+
 	if strings.HasPrefix(url, "s3") {
 		return S3Downloader{url, s3.New(session.Must(session.NewSession(&aws.Config{HTTPClient: &httpClient})))}
+	} else if strings.HasPrefix(url, "gs") {
+		ctx := context.Background()
+		options := []option.ClientOption{}
+
+		// Add custom credentials option if defined
+		credsJSON := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+		if credsJSON != "" {
+			options = append(options, option.WithCredentialsJSON([]byte(credsJSON)))
+		}
+
+		client, err := storage.NewClient(
+			ctx,
+			options...,
+		)
+		if err != nil {
+			log.Fatal("Failed to create GCS client: ", err)
+		}
+		return GCSDownloader{url, client}
 	} else {
 		return HttpDownloader{url, &httpClient}
 	}

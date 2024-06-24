@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"golang.org/x/oauth2"
 	"golang.org/x/sys/unix"
 	"google.golang.org/api/option"
 )
@@ -90,8 +91,15 @@ func GetDownloader(url string, useFips bool) Downloader {
 
 		// Add custom credentials option if defined
 		credsJSON := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+		gcsAccessToken := os.Getenv("GCS_ACCESS_TOKEN")
 		if credsJSON != "" {
 			options = append(options, option.WithCredentialsJSON([]byte(credsJSON)))
+		} else if gcsAccessToken != "" {
+			// Create a token source that always returns the static access token
+			tokenSource := oauth2.StaticTokenSource(
+				&oauth2.Token{AccessToken: gcsAccessToken},
+			)
+			options = append(options, option.WithTokenSource(tokenSource))
 		}
 
 		client, err := storage.NewClient(

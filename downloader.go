@@ -63,7 +63,7 @@ type Downloader interface {
 	GetRanges(ranges [][]int64) (*multipart.Reader, error)
 }
 
-func GetDownloader(url string, useFips bool) Downloader {
+func GetDownloader(url string, useFips bool, useGetForSize bool) Downloader {
 	// NOTE: Only S3 + HTTP downloaders use this transport. GCS uses the default transport configured by the SDK.
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
@@ -128,7 +128,7 @@ func GetDownloader(url string, useFips bool) Downloader {
 		}
 		return GCSDownloader{url, client}
 	} else {
-		return HttpDownloader{url, &httpClient}
+		return HttpDownloader{url, &httpClient, useGetForSize}
 	}
 }
 
@@ -139,6 +139,7 @@ func GetDownloader(url string, useFips bool) Downloader {
 // RANGE requests or if the total file is smaller than a single download chunk.
 func GetDownloadStream(downloader Downloader, chunkSize int64, numWorkers int) io.Reader {
 	var size, supportsRange, supportsMultipart = downloader.GetFileInfo()
+	log.Printf("File Size (B): %d", size)
 	log.Printf("File Size (MiB): %d", size/1e6)
 	log.Println("Supports RANGE:", supportsRange)
 	log.Println("Supports multipart RANGE:", supportsMultipart)

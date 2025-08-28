@@ -35,6 +35,7 @@ var opts struct {
 	Headers         map[string]string `long:"headers" short:"H" description:"Headers to use with http request"`
 	UseFips         bool              `long:"use-fips-endpoint" description:"Use FIPS endpoint when downloading from S3"`
 	DisableHttp2    bool              `long:"disable-http2" description:"Disable http2 to avoid reusing connections for GCS downloads"`
+	UseGetForSize   bool              `long:"use-get-for-size" description:"Use GET with Range header instead of HEAD to determine file size for HTTP(S) URLs"`
 }
 
 var minSpeedBytesPerMillisecond = 0.0
@@ -68,7 +69,7 @@ func main() {
 	var rawUrl = args[0]
 	processMinSpeedFlag()
 	opts.ChunkSize *= 1e6 // Convert chunk size from MB to B
-	fileStream := GetDownloadStream(GetDownloader(rawUrl, opts.UseFips), opts.ChunkSize, opts.NumWorkers)
+	fileStream := GetDownloadStream(GetDownloader(rawUrl, opts.UseFips, opts.UseGetForSize), opts.ChunkSize, opts.NumWorkers)
 
 	url, err := url.Parse(rawUrl)
 	if err != nil {
@@ -111,6 +112,8 @@ func main() {
 		}
 		ExtractTar(finalStream)
 	}
+
+	log.Println("Done")
 }
 
 // Reads first few bytes from file stream to get any possible

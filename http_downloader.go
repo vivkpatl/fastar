@@ -18,25 +18,60 @@ import (
 )
 
 type HttpDownloader struct {
-	Url    string
-	client *http.Client
+	Url           string
+	client        *http.Client
+	useGetForSize bool
 }
 
 func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
-	req := httpDownloader.generateRequest("HEAD")
-	resp := httpDownloader.retryHttpRequest(req)
+	var resp *http.Response
+	var contentLength int64
 
-	if resp.ContentLength > opts.ChunkSize {
+	if httpDownloader.useGetForSize {
+		// Use GET with Range header to determine file size
+		req := httpDownloader.generateRequest("GET")
+		req.Header.Add("Range", "bytes=0-0")
+		resp = httpDownloader.retryHttpRequest(req)
+		
+		// Parse Content-Range header to get total file size
+		contentRange := resp.Header.Get("Content-Range")
+		if contentRange != "" {
+			// Content-Range format: "bytes 0-0/total_size"
+			if parts := strings.Split(contentRange, "/"); len(parts) == 2 {
+				if size, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+					contentLength = size
+				} else {
+					log.Printf("Failed to parse Content-Range size: %s", err.Error())
+					contentLength = resp.ContentLength
+				}
+			} else {
+				log.Printf("Unexpected Content-Range format: %s", contentRange)
+				contentLength = resp.ContentLength
+			}
+		} else {
+			contentLength = resp.ContentLength
+		}
+		
+		// Close the body since we only needed the headers
+		resp.Body.Close()
+	} else {
+		// Use traditional HEAD request
+		req := httpDownloader.generateRequest("HEAD")
+		resp = httpDownloader.retryHttpRequest(req)
+		contentLength = resp.ContentLength
+	}
+
+	if contentLength > opts.ChunkSize {
 		// Temporarily disable checking support for range/multipart. These checks
 		// initiate file downloads from azure blob storage even if we don't consume
 		// the whole body and this may be overloading their servers.
 		// TODO: see if there's some way to determine multipart range support without
 		// necessarily returning the whole file in the body.
-		return resp.ContentLength, resp.Header.Get("Accept-Ranges") != "", false
+		return contentLength, resp.Header.Get("Accept-Ranges") != "", false
 	} else {
 		// If the file is tiny it doesn't matter if we support any kind
 		// of range request
-		return resp.ContentLength, false, false
+		return contentLength, false, false
 	}
 }
 

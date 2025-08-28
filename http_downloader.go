@@ -49,6 +49,7 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
 				contentLength = resp.ContentLength
 			}
 		} else {
+			log.Printf("Falling back to Content-Length due to missing Content-Range: %d", resp.ContentLength)
 			contentLength = resp.ContentLength
 		}
 		

@@ -112,8 +112,6 @@ func main() {
 		}
 		ExtractTar(finalStream)
 	}
-
-	log.Println("Done")
 }
 
 // Reads first few bytes from file stream to get any possible

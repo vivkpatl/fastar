@@ -27,6 +27,10 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
 	var resp *http.Response
 	var contentLength int64
 
+	// If useGetForSize is true, use GET with Range header to determine file size.
+	// This was inspired by https://stackoverflow.com/questions/15717230/pre-signing-amazon-s3-urls-for-both-head-and-get-verbs,
+	// which in turn allows usage of S3 presigned URLs which can only be signed for one HTTP method.
+	// This has been tested on AWS, Azure, and GCP.
 	if httpDownloader.useGetForSize {
 		// Use GET with Range header to determine file size
 		req := httpDownloader.generateRequest("GET")

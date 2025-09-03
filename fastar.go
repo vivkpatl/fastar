@@ -35,7 +35,7 @@ var opts struct {
 	Headers         map[string]string `long:"headers" short:"H" description:"Headers to use with http request"`
 	UseFips         bool              `long:"use-fips-endpoint" description:"Use FIPS endpoint when downloading from S3"`
 	DisableHttp2    bool              `long:"disable-http2" description:"Disable http2 to avoid reusing connections for GCS downloads"`
-	UseGetForSize   bool              `long:"use-get-for-size" description:"Use GET with Range header instead of HEAD to determine file size for HTTP(S) URLs"`
+	UseGetForSize   bool              `long:"use-get-for-size" description:"Use GET with Range header instead of HEAD to determine file size for HTTP(S) URLs. Assumes RANGE support on the server side."`
 }
 
 var minSpeedBytesPerMillisecond = 0.0

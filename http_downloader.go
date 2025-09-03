@@ -48,12 +48,10 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
 				if size, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
 					contentLength = size
 				} else {
-					log.Printf("Failed to parse Content-Range size: %s", err.Error())
-					contentLength = resp.ContentLength
+					log.Fatal("Failed to parse Content-Range size: ", err.Error())
 				}
 			} else {
-				log.Printf("Unexpected Content-Range format: %s", contentRange)
-				contentLength = resp.ContentLength
+				log.Fatal("Unexpected Content-Range format: ", contentRange)
 			}
 		} else {
 			log.Fatal("Content-Range missing on response when using GET for size. Failing download.")

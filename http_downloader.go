@@ -36,6 +36,9 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
 		req := httpDownloader.generateRequest("GET")
 		req.Header.Add("Range", "bytes=0-0")
 		resp = httpDownloader.retryHttpRequest(req)
+
+		// Close the body since we only needed the headers
+		defer resp.Body.Close()
 		
 		// Parse Content-Range header to get total file size
 		contentRange := resp.Header.Get("Content-Range")
@@ -53,12 +56,8 @@ func (httpDownloader HttpDownloader) GetFileInfo() (int64, bool, bool) {
 				contentLength = resp.ContentLength
 			}
 		} else {
-			log.Printf("Falling back to Content-Length due to missing Content-Range: %d", resp.ContentLength)
-			contentLength = resp.ContentLength
+			log.Fatal("Content-Range missing on response when using GET for size. Failing download.")
 		}
-		
-		// Close the body since we only needed the headers
-		resp.Body.Close()
 	} else {
 		// Use traditional HEAD request
 		req := httpDownloader.generateRequest("HEAD")
